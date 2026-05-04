@@ -10,15 +10,15 @@
 
 ## 2. 实验环境
 
-| 组件 | 版本/型号 |
-|------|----------|
-| 操作系统 | Windows 11 Home China |
-| Python | 3.13 |
-| 深度学习框架 | PyTorch (Nightly) + CUDA 13.0 |
-| Torchvision | 0.21.0+cu124 |
-| GPU | NVIDIA GeForce RTX 5060 Laptop GPU (sm_120) |
-| Web 框架 | Streamlit 1.57.0 |
-| 目标模型 | ResNet50 (ImageNet-1K 预训练权重) |
+| 组件          | 版本/型号                                       |
+| ----------- | ------------------------------------------- |
+| 操作系统        | Windows 11 Home China                       |
+| Python      | 3.13                                        |
+| 深度学习框架      | PyTorch (Nightly) + CUDA 13.0               |
+| Torchvision | 0.21.0+cu124                                |
+| GPU         | NVIDIA GeForce RTX 5060 Laptop GPU (sm_120) |
+| Web 框架      | Streamlit 1.57.0                            |
+| 目标模型        | ResNet50 (ImageNet-1K 预训练权重)                |
 
 ---
 
@@ -83,6 +83,7 @@ $$\frac{\partial L}{\partial X} = \frac{\partial L}{\partial f_{out}} \cdot \fra
 $$X_{adv} = X - \epsilon \cdot \text{sign}(\nabla_X J(X, Y_{target}))$$
 
 实现流程：
+
 1. 准备对抗输入（克隆 + 梯度追踪）；
 2. 计算定向损失；
 3. 反向传播提取梯度；
@@ -120,6 +121,7 @@ FGSM 单步攻击对高置信度或语义差距大的目标（如 banana → coc
 $$X_{t+1} = \Pi_{\epsilon} \left( \text{clamp}\left( X_t - \alpha \cdot \text{sign}(\nabla_X J(X_t, Y_{target})), 0, 1 \right) \right)$$
 
 **实现细节**：
+
 - 每步步长 `alpha = epsilon / 4`（默认）；
 - 每步更新后执行**投影操作** `Π_ε`：计算当前对抗样本与原始样本的偏差，用 `torch.clamp(perturbation, -epsilon, epsilon)` 限制 $L_\infty$ 距离不超过 `epsilon`；
 - 再执行 `clamp(0, 1)` 截断到合法像素范围；
@@ -132,21 +134,25 @@ $$X_{t+1} = \Pi_{\epsilon} \left( \text{clamp}\left( X_t - \alpha \cdot \text{si
 使用 `test_cli.py` 在本地命令行对 `testset` 中的 banana 图片进行定向攻击测试，对比修复前后及两种算法的差异：
 
 **修复前（归一化空间 clamp）**：
+
 - `ε=0.03`：banana 置信度 70.65% → 10.54%（仍为 Top-1），攻击失败；
 - `ε=0.05`：banana 置信度 70.65% → 9.97%（仍为 Top-1），攻击失败；
 - `ε=0.1`：banana 置信度 70.65% → 21.48%（置信度反弹，仍为 Top-1），攻击失败。
 - 共性：第二预测始终为 lemon 等同类黄色水果，说明扰动方向被扭曲为"同类混淆"而非"跨类误导"。
 
 **修复后（像素空间 FGSM）**：
+
 - 对近邻类别（如 banana → lemon/orange）效果明显改善，`ε=0.03` 即可取得较高成功率；
 - 对语义差距大的远类别（如 banana → cock），`ε ≤ 0.05` 时单步攻击仍难以跨越决策边界。
 
 **PGD 迭代攻击**：
+
 - 对近邻类别：`ε=0.03`, `iter=10` 即可稳定成功；
 - 对远类别（banana → cock）：`ε=0.05`, `iter=20` 成功率远高于 FGSM，能稳定将模型误导至目标类别；
 - 实际最大扰动值与输入 `ε` 基本一致，验证像素空间攻击的正确性。
 
 **结论**：
+
 1. 像素空间攻击是正确实现 FGSM/PGD 的前提，归一化空间的错误 `clamp` 会根本性破坏攻击方向；
 2. 单步 FGSM 适用于低置信度或近邻类别的快速攻击；
 3. PGD 迭代攻击是大类间、高置信度目标的可靠选择，多步累积的扰动动量能有效跨越深层模型的复杂决策边界。
