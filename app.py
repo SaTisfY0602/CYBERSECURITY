@@ -9,6 +9,7 @@ import streamlit as st
 from core.loadModel import get_adversarial_model
 from components.attack_tab import render_attack_tab
 from components.defense_tab import render_defense_tab
+from components.styles import inject_custom_css
 
 
 def main():
@@ -17,6 +18,8 @@ def main():
         page_icon=None,
         layout="wide",
     )
+
+    inject_custom_css()
 
     st.title("ResNet50 对抗攻击与防御演示")
     st.caption("基于 PyTorch 预训练 ResNet50，实现 FGSM/PGD 定向对抗样本攻击与预处理防御")
