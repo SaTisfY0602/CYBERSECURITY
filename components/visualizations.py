@@ -9,6 +9,17 @@ import numpy as np
 import torch
 from matplotlib import pyplot as plt
 import matplotlib.cm as cm
+import matplotlib as mpl
+
+# 全局 Matplotlib 样式，与 Slate + Amber 主题统一
+mpl.rcParams.update({
+    "axes.edgecolor": "#e2e8f0",
+    "axes.labelcolor": "#475569",
+    "xtick.color": "#64748b",
+    "ytick.color": "#64748b",
+    "figure.dpi": 120,
+    "font.size": 10,
+})
 
 
 def plot_perturbation_heatmap(perturbation: torch.Tensor) -> plt.Figure:
@@ -57,7 +68,7 @@ def plot_confidence_bar_chart(
     fig, ax = plt.subplots(figsize=(5, 3))
     categories = [f"原始: {original_name}", f"目标: {target_name}"]
     values = [original_conf, target_conf]
-    colors = ["steelblue", "coral"]
+    colors = ["#1e293b", "#d97706"]
 
     bars = ax.bar(categories, values, color=colors, width=0.5)
     ax.set_ylabel("Confidence (%)")
@@ -91,11 +102,11 @@ def plot_pgd_convergence_curve(target_confs: List[float]) -> plt.Figure:
     """
     fig, ax = plt.subplots(figsize=(6, 3))
     iterations = list(range(1, len(target_confs) + 1))
-    ax.plot(iterations, target_confs, marker="o", color="coral", linewidth=2)
+    ax.plot(iterations, target_confs, marker="o", color="#d97706", linewidth=2)
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Target Confidence (%)")
     ax.set_title("PGD Convergence Curve")
     ax.set_ylim(0, 100)
-    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.grid(True, linestyle="--", alpha=0.5, color="#e2e8f0")
     plt.tight_layout()
     return fig
