@@ -1,6 +1,12 @@
 # Claude local cache/config
 .claude/
 
+# Superpowers brainstorming artifacts
+.superpowers/
+
+# Temp files
+*.tmp.*
+
 # Python
 __pycache__/
 *.py[cod]
