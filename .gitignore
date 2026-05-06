@@ -18,3 +18,7 @@ __pycache__/
 .venv
 env/
 venv/
+
+# HF Spaces
+.venv/
+outputs/

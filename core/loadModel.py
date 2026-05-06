@@ -209,30 +209,20 @@ def verify_environment() -> None:
 
     py_major, py_minor, _ = platform.python_version_tuple()
     py_ver = (int(py_major), int(py_minor))
-    if py_ver < (3, 13):
-        print(f"[WARN] 当前 Python 版本为 {py_major}.{py_minor}，建议升级至 3.13 以获得最佳兼容性。")
+    if py_ver < (3, 10):
+        print(f"[WARN] 当前 Python 版本为 {py_major}.{py_minor}，建议升级至 3.10+ 以获得最佳兼容性。")
     else:
-        print(f"[INFO] Python 版本: {py_major}.{py_minor} ✔")
+        print(f"[INFO] Python 版本: {py_major}.{py_minor}")
 
     print(f"[INFO] PyTorch 版本: {torch.__version__}")
     if torch.cuda.is_available():
         cuda_ver = torch.version.cuda
         print(f"[INFO] CUDA 版本: {cuda_ver}")
-        if cuda_ver and not cuda_ver.startswith("13"):
-            print(f"[WARN] 当前 CUDA 版本为 {cuda_ver}，建议安装支持 CUDA 13.0 的 PyTorch Nightly 以完全释放 RTX 5060 算力。")
-        else:
-            print("[INFO] CUDA 13.0 检查通过 ✔")
-
         capability = torch.cuda.get_device_capability()
         print(f"[INFO] GPU 计算能力: sm_{capability[0]}{capability[1]}")
-        if capability != (12, 0):
-            print(f"[WARN] 当前 GPU 计算能力为 sm_{capability[0]}{capability[1]}，预期为 sm_120 (RTX 5060)。")
-        else:
-            print("[INFO] sm_120 计算能力检查通过 ✔")
-
         print(f"[INFO] GPU 型号: {torch.cuda.get_device_name(0)}")
     else:
-        print("[WARN] CUDA 不可用，将回退至 CPU 推理，性能可能受限。")
+        print("[INFO] CUDA 不可用，将回退至 CPU 推理。")
 
 
 def main():

@@ -1,3 +1,14 @@
+---
+title: ResNet50 对抗攻击演示
+emoji: 🛡️
+colorFrom: amber
+colorTo: orange
+sdk: streamlit
+sdk_version: 1.57.0
+app_file: app.py
+pinned: false
+---
+
 # ResNet50-Adversarial-Lab
 
 基于 PyTorch 的 ResNet50 图像识别与目标定向对抗攻击（Targeted Adversarial Attack）研究项目。
