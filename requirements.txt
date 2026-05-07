@@ -1,6 +1,10 @@
+# 通用依赖清单
+# 支持 CPU 与 NVIDIA GPU（CUDA）环境
+# GPU 用户如需特定 CUDA 版本加速，请参考 README.md 中的 PyTorch 官方安装指引
+
 torch>=2.0.0
 torchvision>=0.15.0
 streamlit>=1.30.0
-Pillow>=10.0.0
+pillow>=9.0.0
 numpy>=1.24.0
 matplotlib>=3.7.0
