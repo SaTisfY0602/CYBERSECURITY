@@ -97,3 +97,20 @@
 - 命令行输出中的"实际最大扰动"应与输入 `ε` 基本一致，确认梯度传播与扰动生成未受归一化/反归一化流程扭曲。
 
 ---
+
+## 2026/05/13 — 部署：Hugging Face Spaces 云端部署配置
+
+**修改内容**：
+
+- 下载 ImageNet-1K 标签文件到 `utils/imagenet_labels.json`，实现标签本地化。
+- 重构 `core/loadModel.py` 与 `utils/imagenet_labels.py`：优先读取本地 JSON，网络不可达时回退至在线下载或数字 ID，消除 HF Spaces 启动时的网络依赖。
+- 完善 `.streamlit/config.toml`：新增 `maxUploadSize = 50`、`enableXsrfProtection = false`、`gatherUsageStats = false`，适配 HF Spaces 运行时环境。
+- 确认 `requirements.txt` 与 `README.md` frontmatter 已具备 Streamlit SDK 自动识别条件。
+
+**实验预期**：
+
+- 将代码 push 至 Hugging Face Spaces 后，可自动构建并运行 Streamlit 应用。
+- 访问者无需安装任何环境，通过浏览器即可上传图片、执行 FGSM/PGD 攻击并查看噪声热力图。
+- HF Spaces 免费实例为纯 CPU，模型加载与推理将自动回退至 CPU，功能完整但速度较本地 GPU 慢。
+
+---

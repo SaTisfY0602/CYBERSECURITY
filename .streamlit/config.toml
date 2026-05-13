@@ -4,3 +4,13 @@ backgroundColor = "#f8fafc"
 secondaryBackgroundColor = "#ffffff"
 textColor = "#1e293b"
 font = "sans serif"
+
+[server]
+# HF Spaces 环境下限制上传大小，避免内存溢出
+maxUploadSize = 50
+# 允许从任何来源嵌入（ iframe 等）
+enableXsrfProtection = false
+
+[browser]
+# 禁用使用统计上报，避免 HF Spaces 网络限制下的潜在问题
+gatherUsageStats = false

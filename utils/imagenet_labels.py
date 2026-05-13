@@ -4,6 +4,7 @@ utils/imagenet_labels.py
 """
 
 import json
+import os
 import urllib.request
 from typing import List
 
@@ -11,10 +12,20 @@ LABELS_URL = (
     "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/"
     "master/imagenet-simple-labels.json"
 )
+# 本地标签文件路径（HF Spaces 部署时优先使用，避免网络依赖）
+LOCAL_LABELS_PATH = os.path.join(os.path.dirname(__file__), "imagenet_labels.json")
 
 
 def load_labels() -> List[str]:
-    """从网络加载 ImageNet 标签，失败时返回数字 ID 列表作为回退。"""
+    """优先从本地加载 ImageNet 标签，失败时回退为网络下载或数字 ID 列表。"""
+    try:
+        local_path = os.path.abspath(LOCAL_LABELS_PATH)
+        if os.path.isfile(local_path):
+            with open(local_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+
     try:
         with urllib.request.urlopen(LABELS_URL, timeout=10) as response:
             labels = json.loads(response.read().decode("utf-8"))

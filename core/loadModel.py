@@ -27,6 +27,8 @@ class AdversarialModel:
         "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/"
         "master/imagenet-simple-labels.json"
     )
+    # 本地标签文件路径（HF Spaces 部署时优先使用，避免网络依赖）
+    LOCAL_LABELS_PATH = os.path.join(os.path.dirname(__file__), "..", "utils", "imagenet_labels.json")
     VALID_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 
     def __init__(self, device: Optional[torch.device] = None):
@@ -68,7 +70,15 @@ class AdversarialModel:
         return torch.device("cpu")
 
     def _load_labels(self) -> List[str]:
-        """从网络加载 ImageNet 标签，失败时回退为数字 ID 列表。"""
+        """优先从本地加载 ImageNet 标签，失败时回退为网络下载或数字 ID 列表。"""
+        try:
+            local_path = os.path.abspath(self.LOCAL_LABELS_PATH)
+            if os.path.isfile(local_path):
+                with open(local_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+
         try:
             with urllib.request.urlopen(self.IMAGENET_LABELS_URL, timeout=10) as response:
                 labels = json.loads(response.read().decode("utf-8"))
