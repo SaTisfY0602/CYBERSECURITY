@@ -1,5 +1,18 @@
 # 实验日志
 
+## 2026/05/20 - 修复 Streamlit ScriptRunContext 警告
+
+**修改内容**：
+
+- 将 `st.cache_resource` 装饰器从 `core/loadModel.py`（模块级）迁移至 `app.py`（运行时）。
+- `core/loadModel.py` 中的 `get_adversarial_model()` 现为无缓存的纯工厂函数。
+- `app.py` 中新增 `@st.cache_resource` 包装函数，确保在 Streamlit 上下文就绪后才应用缓存。
+
+**修复原理**：
+
+- `st.cache_resource` 在模块导入阶段被调用时，Streamlit 的 ScriptRunContext 尚未初始化，导致 `missing ScriptRunContext` 警告。
+- 将缓存装饰器移至 `app.py` 的函数定义处，使其仅在 Streamlit 脚本运行时才被应用。
+
 ## 2026/04/29 - 阶段一：模型部署脚本编写
 
 **修改内容**：
@@ -70,6 +83,7 @@
 ## 2026/05/03 — 阶段三/四：Streamlit Web UI 开发与防御实现
 
 ### 修改内容
+
 - 创建 Streamlit 交互式 Web 应用（`app.py`）
 - 实现攻击实验室 Tab：FGSM/PGD 定向攻击、噪声热力图、置信度柱状图、PGD 迭代收敛曲线、动态攻击提示
 - 实现防御加固 Tab：高斯模糊、JPEG 压缩预处理防御、防御前后识别对比
@@ -77,10 +91,12 @@
 - 采用分层架构：`core/` 封装算法、`components/` 封装 UI、`app.py` 作为入口
 
 ### 实验预期
+
 - 用户可通过浏览器直观体验对抗攻击全过程（上传 → 配置参数 → 查看扰动 → 对比置信度）
 - 预处理防御可有效破坏对抗扰动的高频结构，使模型恢复对部分对抗样本的正确识别
 
 ---
+
 ## 2026/04/30 - 优化：FGSM 攻击下沉至像素空间与 PGD 迭代攻击实现
 
 **修改内容**：

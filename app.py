@@ -6,10 +6,16 @@ Streamlit 主应用入口。
 
 import streamlit as st
 
-from core.loadModel import get_adversarial_model
+from core.loadModel import get_adversarial_model as _load_model
 from components.attack_tab import render_attack_tab
 from components.defense_tab import render_defense_tab
 from components.styles import inject_custom_css
+
+
+@st.cache_resource
+def get_adversarial_model():
+    """全局缓存的模型工厂函数。装饰器在 app.py 中应用，确保 Streamlit 上下文已就绪。"""
+    return _load_model()
 
 
 def main():
