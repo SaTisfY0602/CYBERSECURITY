@@ -30,6 +30,11 @@ prompt.md
 # Temporary verification scripts
 core/verify_task22.py
 
+# Non-core deliverables (excluded from public repo)
+report.md
+Presentation.md
+tests/
+
 # Unrelated temp files
 simple-line-drawing-*
 展板*
