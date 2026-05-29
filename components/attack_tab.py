@@ -5,11 +5,13 @@ Streamlit "攻击实验室" Tab 的完整 UI 与交互逻辑。
 
 from typing import Optional
 import os
+import hashlib
 
 import streamlit as st
 from PIL import Image
 
 from core.attack_engine import AttackEngine
+from core.loadModel import AdversarialModel
 from components.visualizations import (
     plot_perturbation_heatmap,
     plot_confidence_bar_chart,
@@ -31,7 +33,7 @@ def render_attack_tab(model: AttackEngine) -> None:
         image: Optional[Image.Image] = None
 
         if upload_option == "上传图片":
-            uploaded = st.file_uploader("上传图片", type=["jpg", "jpeg", "png", "webp"])
+            uploaded = st.file_uploader("上传图片", type=["jpg", "jpeg", "png", "webp", "bmp", "gif"])
             if uploaded is not None:
                 image = Image.open(uploaded).convert("RGB")
         else:
@@ -39,7 +41,7 @@ def render_attack_tab(model: AttackEngine) -> None:
             if os.path.isdir(testset_dir):
                 sample_files = [
                     f for f in os.listdir(testset_dir)
-                    if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+                    if f.lower().endswith(AdversarialModel.VALID_EXTENSIONS)
                 ]
                 if sample_files:
                     selected = st.selectbox("选择示例图", sample_files)
@@ -72,9 +74,16 @@ def render_attack_tab(model: AttackEngine) -> None:
         st.info("请在侧边栏上传图片或选择示例图")
         return
 
-    # 预处理并获取原始预测
-    original_tensor = model.preprocess(image)
-    original_result = model.predict(original_tensor)
+    # 预处理并获取原始预测（仅在图片变更时重新计算，避免每帧重复推理）
+    image_hash = hashlib.md5(image.tobytes()).hexdigest()
+    cached_hash = st.session_state.get("_original_image_hash", "")
+    if image_hash != cached_hash:
+        original_tensor = model.preprocess(image)
+        st.session_state["_original_tensor"] = original_tensor
+        st.session_state["_original_result"] = model.predict(original_tensor)
+        st.session_state["_original_image_hash"] = image_hash
+    original_tensor = st.session_state["_original_tensor"]
+    original_result = st.session_state["_original_result"]
     original_name = original_result["topk_names"][0]
     original_conf = original_result["topk_confs"][0]
 

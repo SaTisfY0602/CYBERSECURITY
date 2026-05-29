@@ -39,7 +39,7 @@ def render_defense_tab(model: AttackEngine) -> None:
             st.warning("尚未生成对抗样本，请先在'攻击实验室'执行攻击。")
             return
     else:
-        uploaded = st.file_uploader("上传对抗样本图片", type=["jpg", "jpeg", "png", "webp"])
+        uploaded = st.file_uploader("上传对抗样本图片", type=["jpg", "jpeg", "png", "webp", "bmp", "gif"])
         if uploaded is not None:
             adv_image = Image.open(uploaded).convert("RGB")
         else:

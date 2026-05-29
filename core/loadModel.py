@@ -3,8 +3,6 @@
 
 import os
 import sys
-import json
-import urllib.request
 import platform
 from typing import List, Dict, Any, Union, Optional
 from PIL import Image
@@ -70,21 +68,9 @@ class AdversarialModel:
         return torch.device("cpu")
 
     def _load_labels(self) -> List[str]:
-        """优先从本地加载 ImageNet 标签，失败时回退为网络下载或数字 ID 列表。"""
-        try:
-            local_path = os.path.abspath(self.LOCAL_LABELS_PATH)
-            if os.path.isfile(local_path):
-                with open(local_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-        except Exception:
-            pass
-
-        try:
-            with urllib.request.urlopen(self.IMAGENET_LABELS_URL, timeout=10) as response:
-                labels = json.loads(response.read().decode("utf-8"))
-            return labels
-        except Exception:
-            return [str(i) for i in range(1000)]
+        """委托 utils/imagenet_labels 统一加载 ImageNet 标签。"""
+        from utils.imagenet_labels import load_labels
+        return load_labels()
 
     def get_label(self, class_id: int) -> str:
         """根据类别索引返回可读标签，越界时回退为 ID 字符串。"""

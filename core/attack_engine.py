@@ -2,7 +2,7 @@
 # 阶段二任务 2.1：构建定向攻击引擎基础架构
 # 功能：基于 AdversarialModel 扩展攻击相关基础方法，为后续 FGSM/PGD 定向攻击提供支持
 
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -18,6 +18,13 @@ class AttackEngine(AdversarialModel):
     继承 AdversarialModel 的全部推理与预处理能力，
     扩展对抗样本生成所需的基础方法（梯度追踪、梯度清理、攻击环境预设）。
     """
+
+    def __init__(self, device: Optional[torch.device] = None):
+        super().__init__(device)
+        # 预置去归一化/归一化常量，避免每次攻击调用时重复创建张量
+        self._mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1, 3, 1, 1)
+        self._std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1, 3, 1, 1)
+        self.criterion = torch.nn.CrossEntropyLoss()
 
     def prepare_adversarial_input(self, image_tensor: torch.Tensor) -> torch.Tensor:
         """
@@ -39,12 +46,7 @@ class AttackEngine(AdversarialModel):
         Returns:
             torch.Tensor: 已开启梯度追踪的克隆张量，位于 self.device 上。
         """
-        # 攻击环境预设：确保模型处于评估模式，关闭 Dropout 与 BatchNorm 的统计更新，
-        # 保证前向传播与梯度计算的确定性，避免训练态引入随机性导致攻击方向不稳定。
-        self.model.eval()
-
-        # 硬件对齐：将张量迁移到目标设备（RTX 5060 CUDA），并克隆分离以避免修改原始数据
-        adv_input = image_tensor.clone().detach().to(self.device)
+        adv_input = image_tensor.clone().detach()
 
         # 开启输入张量的梯度追踪，这是计算对抗扰动方向的前提
         adv_input.requires_grad_(True)
@@ -87,19 +89,9 @@ class AttackEngine(AdversarialModel):
         Returns:
             torch.Tensor: 标量损失值，位于计算图中，可调用 .backward() 反向传播。
         """
-        # 攻击环境预设：确保模型处于评估模式，关闭 Dropout 与 BatchNorm 的训练时统计更新，
-        # 消除随机性，保证多次计算损失时梯度方向稳定、可复现。
-        self.model.eval()
-
-        # 前向传播：获取模型对当前输入的原始 logits（未经 Softmax 的 1000 维输出）
-        output = self.model(input_tensor)  # shape: (1, 1000)
-
-        # 构造目标标签张量，确保数据类型与设备均与模型输出对齐
+        output = self.model(input_tensor)
         target = torch.tensor([target_id], dtype=torch.long, device=self.device)
-
-        # 使用交叉熵损失衡量当前输出与目标类别的差距
-        criterion = torch.nn.CrossEntropyLoss()
-        loss = criterion(output, target)
+        loss = self.criterion(output, target)
 
         return loss
 
@@ -171,27 +163,25 @@ class AttackEngine(AdversarialModel):
                 - perturbation: 纯扰动张量（像素空间），用于热力图可视化。
                 - pixel_grad: 像素空间梯度，可用于进一步分析。
         """
-        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1, 3, 1, 1)
+        mean = self._mean
+        std = self._std
 
         # 1. 反归一化到像素空间 [0, 1]
-        pixel_input = original_tensor.clone().detach().to(self.device)
+        pixel_input = original_tensor.clone().detach()
         pixel_input = pixel_input * std + mean
 
-        # 2. 在像素空间开启梯度追踪（攻击在此空间执行，避免归一化空间 clamp 扭曲）
+        # 2. 在像素空间开启梯度追踪
         pixel_input.requires_grad_(True)
 
-        # 3. 重新归一化后送入模型前向传播
+        # 3. 归一化后送入模型前向传播
         norm_input = (pixel_input - mean) / std
-        self.model.eval()
         output = self.model(norm_input)
 
-        # 4. 计算定向损失：最小化目标类别的交叉熵
+        # 4. 计算定向损失
         target = torch.tensor([target_id], dtype=torch.long, device=self.device)
-        criterion = torch.nn.CrossEntropyLoss()
-        loss = criterion(output, target)
+        loss = self.criterion(output, target)
 
-        # 5. 反向传播到像素空间，得到像素域梯度
+        # 5. 反向传播到像素空间
         self.model.zero_grad()
         loss.backward()
         pixel_grad = pixel_input.grad.data
@@ -208,125 +198,36 @@ class AttackEngine(AdversarialModel):
 
         return adv_tensor, perturbation, pixel_grad
 
-    def generate_targeted_pgd(
+    def _pgd_impl(
         self,
         original_tensor: torch.Tensor,
         target_id: int,
         epsilon: float,
-        alpha: Optional[float] = None,
-        num_iter: int = 10,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        基于 PGD（Projected Gradient Descent）的定向对抗样本生成。
-
-        PGD 是 FGSM 的多步迭代版本，每步只走一小步（步长 alpha），
-        然后将结果投影回原始样本的 epsilon 邻域内，最后做像素截断。
-        对于高置信度或大类间攻击（如 banana → cock），PGD 成功率远高于单步 FGSM。
-
-        算法流程：
-            X_0 = X
-            for t = 1 to num_iter:
-                X_t = X_{t-1} - alpha * sign( grad(X_{t-1}) )
-                X_t = clip_{epsilon}( X_t, X )   # 投影回 epsilon 邻域
-                X_t = clamp( X_t, 0, 1 )         # 截断到合法像素范围
-            return X_{num_iter}
-
-        Args:
-            original_tensor: 原始图像预处理张量，形状 (1, C, H, W)。
-            target_id: 目标类别索引。
-            epsilon: 最大扰动半径（像素空间 L-inf 范数）。
-            alpha: 每步步长，默认 epsilon / 4。
-            num_iter: 迭代次数，默认 10。
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]:
-                - adv_tensor: 对抗样本（归一化空间）。
-                - total_perturbation: 总扰动量（像素空间）。
-        """
-        if alpha is None:
-            alpha = epsilon / 4.0
-
-        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1, 3, 1, 1)
-
-        # 反归一化到像素空间
-        pixel_orig = original_tensor.clone().detach().to(self.device)
-        pixel_orig = pixel_orig * std + mean  # [0, 1] 空间
-
-        # 初始化对抗样本
-        pixel_adv = pixel_orig.clone()
-
-        for i in range(num_iter):
-            pixel_adv.requires_grad_(True)
-
-            # 归一化后送入模型
-            norm_input = (pixel_adv - mean) / std
-            output = self.model(norm_input)
-
-            target = torch.tensor([target_id], dtype=torch.long, device=self.device)
-            criterion = torch.nn.CrossEntropyLoss()
-            loss = criterion(output, target)
-
-            self.model.zero_grad()
-            loss.backward()
-            grad = pixel_adv.grad.data
-
-            # 单步更新：像素空间梯度下降
-            pixel_adv = pixel_adv - alpha * grad.sign()
-
-            # 投影回 epsilon 邻域：限制与原始样本的距离
-            perturbation = torch.clamp(pixel_adv - pixel_orig, -epsilon, epsilon)
-            pixel_adv = pixel_orig + perturbation
-
-            # 截断到合法像素范围
-            pixel_adv = torch.clamp(pixel_adv, 0.0, 1.0).detach()
-
-        total_perturbation = pixel_adv - pixel_orig
-        adv_tensor = (pixel_adv - mean) / std
-        return adv_tensor, total_perturbation
-
-    def generate_targeted_pgd_with_history(
-        self,
-        original_tensor: torch.Tensor,
-        target_id: int,
-        epsilon: float,
-        alpha: Optional[float] = None,
-        num_iter: int = 10,
+        alpha: float,
+        num_iter: int,
+        record_history: bool,
     ):
-        """
-        带迭代历史记录的 PGD 攻击，返回每轮目标类别的置信度。
+        """PGD 核心循环，供 generate_targeted_pgd 与 with_history 变体共用。"""
+        mean, std = self._mean, self._std
 
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor, List[float]]:
-                - adv_tensor: 对抗样本（归一化空间）
-                - total_perturbation: 总扰动量（像素空间）
-                - history: 每轮迭代后目标类别的置信度百分比列表
-        """
-        if alpha is None:
-            alpha = epsilon / 4.0
-
-        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1, 3, 1, 1)
-
-        pixel_orig = original_tensor.clone().detach().to(self.device)
+        pixel_orig = original_tensor.clone().detach()
         pixel_orig = pixel_orig * std + mean
 
         pixel_adv = pixel_orig.clone()
-        history = []
+        history = [] if record_history else None
 
         for _ in range(num_iter):
             pixel_adv.requires_grad_(True)
             norm_input = (pixel_adv - mean) / std
             output = self.model(norm_input)
 
-            # 记录当前轮次目标类别的置信度
-            probs = torch.softmax(output, dim=1)
-            target_conf = probs[0, target_id].item() * 100
-            history.append(round(target_conf, 2))
+            if record_history:
+                probs = torch.softmax(output, dim=1)
+                target_conf = probs[0, target_id].item() * 100
+                history.append(round(target_conf, 2))
 
             target = torch.tensor([target_id], dtype=torch.long, device=self.device)
-            criterion = torch.nn.CrossEntropyLoss()
-            loss = criterion(output, target)
+            loss = self.criterion(output, target)
 
             self.model.zero_grad()
             loss.backward()
@@ -340,6 +241,37 @@ class AttackEngine(AdversarialModel):
         total_perturbation = pixel_adv - pixel_orig
         adv_tensor = (pixel_adv - mean) / std
         return adv_tensor, total_perturbation, history
+
+    def generate_targeted_pgd(
+        self,
+        original_tensor: torch.Tensor,
+        target_id: int,
+        epsilon: float,
+        alpha: Optional[float] = None,
+        num_iter: int = 10,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """PGD 定向对抗样本生成（无历史记录）。"""
+        if alpha is None:
+            alpha = epsilon / 4.0
+        adv_tensor, total_perturbation, _ = self._pgd_impl(
+            original_tensor, target_id, epsilon, alpha, num_iter, record_history=False,
+        )
+        return adv_tensor, total_perturbation
+
+    def generate_targeted_pgd_with_history(
+        self,
+        original_tensor: torch.Tensor,
+        target_id: int,
+        epsilon: float,
+        alpha: Optional[float] = None,
+        num_iter: int = 10,
+    ):
+        """带迭代历史记录的 PGD 攻击，额外返回每轮目标类别置信度列表。"""
+        if alpha is None:
+            alpha = epsilon / 4.0
+        return self._pgd_impl(
+            original_tensor, target_id, epsilon, alpha, num_iter, record_history=True,
+        )
 
     def tensor_to_image(self, tensor: torch.Tensor) -> Image.Image:
         """
@@ -357,15 +289,13 @@ class AttackEngine(AdversarialModel):
         Returns:
             Image.Image: 反归一化后的 PIL RGB 图像。
         """
-        # ImageNet 官方归一化参数
-        mean = torch.tensor([0.485, 0.456, 0.406], device=tensor.device).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=tensor.device).view(3, 1, 1)
+        # 获取与输入张量同设备的去归一化参数
+        mean = self._mean.to(tensor.device).view(3, 1, 1)
+        std = self._std.to(tensor.device).view(3, 1, 1)
 
-        # 去除 Batch 维度（若存在）
         if tensor.dim() == 4:
             tensor = tensor.squeeze(0)
 
-        # 反归一化：x = x_norm * std + mean
         tensor = tensor * std + mean
 
         # 截断到合法像素范围 [0, 1]，再映射到 [0, 255]

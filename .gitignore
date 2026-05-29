@@ -18,3 +18,18 @@ __pycache__/
 .venv
 env/
 venv/
+
+# IDE
+.idea/
+
+# Project planning & temp notes (not core code)
+docs/superpowers/
+project_plan.md
+prompt.md
+
+# Temporary verification scripts
+core/verify_task22.py
+
+# Unrelated temp files
+simple-line-drawing-*
+展板*

@@ -1,17 +1,33 @@
 # 实验日志
 
-## 2026/05/20 - 修复 Streamlit ScriptRunContext 警告
+## 2026/05/29 — 期末汇报材料：Presentation.md
+
+**修改内容**：
+- 新增 `Presentation.md`，梳理项目中适合放入 PPT 的核心代码片段与讲解大纲。
+- 覆盖 10 张幻灯片：从研究背景、系统架构、模型部署、FGSM/PGD 原理、像素空间 Bug 修复、防御策略、可视化设计到实验总结。
+- 每张幻灯片标注对应代码文件与行号，便于直接从源码裁剪。
+
+## 2026/05/20 - 全面代码优化（复用/质量/效率）
 
 **修改内容**：
 
-- 将 `st.cache_resource` 装饰器从 `core/loadModel.py`（模块级）迁移至 `app.py`（运行时）。
-- `core/loadModel.py` 中的 `get_adversarial_model()` 现为无缓存的纯工厂函数。
-- `app.py` 中新增 `@st.cache_resource` 包装函数，确保在 Streamlit 上下文就绪后才应用缓存。
+1. AttackEngine 效率优化：
+   - 新增 `__init__`，将 mean/std 张量与 CrossEntropyLoss 提升为类属性，消除每次攻击调用时的重复创建。
+   - 移除 `prepare_adversarial_input`、`compute_targeted_loss`、`generate_targeted_adversarial` 中冗余的 `.eval()` 调用（模型构造时已设为 eval 且永不切换）。
+   - 移除 `prepare_adversarial_input`、`generate_targeted_adversarial` 中冗余的 `.to(device)` 调用（tensor 已在 preprocess 阶段放置到目标设备）。
+2. 标签加载去重：
+   - `AdversarialModel._load_labels()` 现委托 `utils/imagenet_labels.load_labels()`，消除 ~30 行重复代码。
+   - 移除 `loadModel.py` 中不再使用的 `json`、`urllib.request` 导入。
+3. PGD 方法 DRY 重构：
+   - 提取 `_pgd_impl()` 私有核心方法，`generate_targeted_pgd` 与 `generate_targeted_pgd_with_history` 均通过它实现。
+4. UI 层优化：
+   - `attack_tab.py` 使用图片 MD5 哈希做 session_state 缓存，避免每次控件交互都重新执行预处理+推理。
+   - `attack_tab.py` 和 `defense_tab.py` 文件扩展名过滤改为复用 `AdversarialModel.VALID_EXTENSIONS`。
+   - 移除 `visualizations.py` 中未使用的 `Optional` 导入，移除 `attack_engine.py` 中未使用的 `List` 导入。
+5. 修复 Streamlit ScriptRunContext 警告：
+   - 将 `st.cache_resource` 装饰器从 `core/loadModel.py`（模块级）迁移至 `app.py`（运行时）。
 
-**修复原理**：
-
-- `st.cache_resource` 在模块导入阶段被调用时，Streamlit 的 ScriptRunContext 尚未初始化，导致 `missing ScriptRunContext` 警告。
-- 将缓存装饰器移至 `app.py` 的函数定义处，使其仅在 Streamlit 脚本运行时才被应用。
+## 2026/05/20 - 修复 Streamlit ScriptRunContext 警告 (旧)
 
 ## 2026/04/29 - 阶段一：模型部署脚本编写
 

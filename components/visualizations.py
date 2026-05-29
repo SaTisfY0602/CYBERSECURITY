@@ -3,7 +3,7 @@ components/visualizations.py
 封装 Matplotlib 图表生成函数，供 Attack Tab 和 Defense Tab 共用。
 """
 
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 import torch
